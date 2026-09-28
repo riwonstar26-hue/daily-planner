@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#4f46e5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="하루일정">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>하루일정 플래너</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f7f9fc;color:#1f2937;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;padding:calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));max-width:680px;margin:auto}button,input{font:inherit}button{cursor:pointer}
+h1{text-align:center;font-size:24px;margin:10px 0 5px}.sub{text-align:center;color:#6b7280;font-size:13px;margin-bottom:18px}
+.ai{width:100%;border:0;border-radius:15px;padding:15px;color:#fff;font-weight:800;background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 6px 18px #4f46e533;margin-bottom:10px}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}.tools button{border:1px solid #e5e7eb;background:#fff;border-radius:11px;padding:11px;font-weight:700}
+.progress{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin-bottom:12px}.pt{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:8px}.bar{height:9px;background:#e5e7eb;border-radius:99px;overflow:hidden}.fill{height:100%;width:0;background:#10b981;transition:.3s}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:15px;margin-bottom:11px}.done{border-left:5px solid #10b981;background:#f0fdf4}.fail{border-left:5px solid #ef4444;background:#fef2f2;opacity:.7}.time{display:inline-block;background:#eef2ff;color:#4f46e5;border-radius:6px;padding:4px 8px;font-size:12px;font-weight:800}.title{font-size:17px;font-weight:800;margin:9px 0 5px}.place{font-size:13px;color:#9ca3af;margin-bottom:12px}.set{color:#111827;font-weight:700}.buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.buttons button,.extra button{padding:9px 3px;border:1px solid #e5e7eb;background:#fff;border-radius:7px;font-size:12px;font-weight:700}.extra{display:flex;gap:6px;margin-top:6px}.extra button{flex:1;background:#f3f4f6;border:0;font-size:11px}.empty{text-align:center;color:#9ca3af;padding:40px 10px}.modal{position:fixed;inset:0;background:#0008;display:none;align-items:center;padding:18px;z-index:5}.modal.show{display:flex}.sheet{background:#fff;border-radius:18px;padding:20px;width:100%;max-width:450px;margin:auto}.sheet h2{margin:0 0 14px}.field{margin-bottom:11px}.field label{display:block;font-size:12px;color:#6b7280;font-weight:700;margin-bottom:5px}.field input{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:9px}.savebar{display:flex;gap:8px;margin-top:14px}.savebar button{flex:1;padding:11px;border:0;border-radius:9px;font-weight:800}.cancel{background:#f3f4f6}.save{background:#4f46e5;color:#fff}.toast{position:fixed;left:50%;bottom:25px;transform:translate(-50%,120px);background:#111827;color:#fff;border-radius:999px;padding:11px 16px;font-size:13px;transition:.25s;z-index:10}.toast.show{transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<h1>🗓️ 하루일정 플래너</h1>
+<div class="sub">오늘 하루를 쉽고 재미있게 계획해보세요</div>
+<button class="ai" onclick="recommend()">✨ 추천 데이트 코스 만들기</button>
+<div class="tools">
+<button onclick="openAdd()">➕ 일정 추가</button><button onclick="notify()">🔔 알림 켜기</button>
+<button onclick="resetPlan()">🔄 초기화</button><button onclick="sharePlan()">📤 일정 공유</button>
+</div>
+<div class="progress"><div class="pt"><span>오늘의 진행률</span><span id="pct">0%</span></div><div class="bar"><div id="fill" class="fill"></div></div></div>
+<div id="list"></div>
+
+<div id="modal" class="modal"><div class="sheet">
+<h2 id="modalTitle">➕ 일정 추가</h2>
+<div class="field"><label>시작</label><input id="start" type="time"></div>
+<div class="field"><label>종료</label><input id="end" type="time"></div>
+<div class="field"><label>일정</label><input id="name" placeholder="예: 영화 보기"></div>
+<div class="field"><label>장소</label><input id="place" placeholder="선택사항"></div>
+<div class="savebar"><button class="cancel" onclick="closeModal()">취소</button><button class="save" onclick="saveEvent()">저장</button></div>
+</div></div>
+<div id="toast" class="toast"></div>
+
+<script>
+const defaults=[
+{id:1,start:"13:00",end:"14:30",name:"점심 식사",place:"",status:""},
+{id:2,start:"14:30",end:"16:00",name:"카페 & 디저트",place:"",status:""},
+{id:3,start:"16:00",end:"18:00",name:"소품샵 / 팝업스토어",place:"",status:""},
+{id:4,start:"18:00",end:"19:30",name:"저녁 식사",place:"",status:""}];
+let data=JSON.parse(localStorage.getItem("dailyPlannerPWA")||"null")||structuredClone(defaults),editing=null;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+function persist(){localStorage.setItem("dailyPlannerPWA",JSON.stringify(data))}
+function render(){
+ data.sort((a,b)=>a.start.localeCompare(b.start)); $("list").innerHTML="";
+ if(!data.length){$("list").innerHTML='<div class="empty">🗓️<br><br>일정이 없어요.<br>위의 일정 추가 버튼을 눌러보세요!</div>';update();return}
+ data.forEach(x=>{
+  const d=document.createElement("div");d.className="card "+x.status;
+  d.innerHTML=`<span class="time">${x.start} ~ ${x.end}</span><div class="title">${esc(x.name)}${x.status==="done"?" ✅":x.status==="fail"?" ❌":""}</div><div class="place ${x.place?"set":""}">${x.place?"📍 "+esc(x.place):"장소를 아직 정하지 않았어요"}</div><div class="buttons"><button onclick="setStatus(${x.id},'done')">✅ 완료</button><button onclick="setStatus(${x.id},'fail')">❌ 실패</button><button onclick="setPlace(${x.id})">📍 장소</button></div><div class="extra"><button onclick="search(${x.id})">🔎 검색</button><button onclick="map(${x.id})">🗺️ 지도</button><button onclick="edit(${x.id})">✏️ 수정</button><button onclick="removeEvent(${x.id})">🗑️ 삭제</button></div>`;
+  $("list").appendChild(d);
+ });update();
+}
+function update(){let n=data.length,d=data.filter(x=>x.status==="done").length,p=n?Math.round(d/n*100):0;$("fill").style.width=p+"%";$("pct").textContent=`${p}% (${d}/${n})`}
+function setStatus(id,s){let x=data.find(x=>x.id===id);x.status=x.status===s?"":s;persist();render();toast(s==="done"?"🎉 일정 완료!":"다음 일정으로 넘어가도 좋아요!")}
+function setPlace(id){let x=data.find(x=>x.id===id),p=prompt("장소를 입력하세요:",x.place);if(p===null)return;x.place=p.trim();persist();render()}
+function search(id){let x=data.find(x=>x.id===id),q=x.place||prompt("검색할 장소를 입력하세요");if(q)location.href="https://www.google.com/search?q="+encodeURIComponent(q+" 맛집")}
+function map(id){let x=data.find(x=>x.id===id);if(!x.place)return toast("먼저 장소를 입력해주세요!");location.href="https://map.naver.com/p/search/"+encodeURIComponent(x.place)}
+function openAdd(){editing=null;$("modalTitle").textContent="➕ 일정 추가";["start","end","name","place"].forEach(id=>$(id).value="");$("modal").classList.add("show")}
+function edit(id){let x=data.find(x=>x.id===id);editing=id;$("modalTitle").textContent="✏️ 일정 수정";$("start").value=x.start;$("end").value=x.end;$("name").value=x.name;$("place").value=x.place;$("modal").classList.add("show")}
+function closeModal(){$("modal").classList.remove("show");editing=null}
+function saveEvent(){let start=$("start").value,end=$("end").value,name=$("name").value.trim(),place=$("place").value.trim();if(!start||!end||!name)return toast("시간과 일정 이름을 입력해주세요!");if(start>=end)return toast("종료 시간은 시작 시간보다 늦어야 해요!");if(editing){let x=data.find(x=>x.id===editing);Object.assign(x,{start,end,name,place})}else data.push({id:Date.now(),start,end,name,place,status:""});persist();render();closeModal();toast("✨ 저장됐어요!")}
+function removeEvent(id){let x=data.find(x=>x.id===id);if(confirm(`"${x.name}" 일정을 삭제할까요?`)){data=data.filter(x=>x.id!==id);persist();render()}}
+function recommend(){if(!confirm("추천 코스로 바꿀까요? 현재 일정은 교체됩니다."))return;let a=[["12:00","13:30","🍝 점심 맛집"],["13:30","15:00","☕ 분위기 좋은 카페"],["15:00","17:00","🛍️ 소품샵 / 팝업스토어"],["17:00","18:30","🌳 산책 / 공원"],["18:30","20:00","🍽️ 저녁 식사"],["20:00","21:30","🎬 영화 / 야경"]];data=a.map((x,i)=>({id:Date.now()+i,start:x[0],end:x[1],name:x[2],place:"",status:""}));persist();render();toast("✨ 추천 코스를 만들었어요!")}
+function resetPlan(){if(confirm("일정을 초기화할까요?")){data=structuredClone(defaults);persist();render();}}
+async function sharePlan(){let text="🗓️ 오늘의 하루 일정\n\n"+data.map(x=>`${x.start} ~ ${x.end}\n${x.name}${x.status==="done"?" ✅":x.status==="fail"?" ❌":""}\n${x.place?"📍 "+x.place:""}`).join("\n\n");if(navigator.share){try{await navigator.share({title:"오늘의 하루 일정",text})}catch(e){}}else{await navigator.clipboard.writeText(text);toast("📋 복사됐어요!")}}
+async function notify(){if(!("Notification"in window))return toast("이 기기는 브라우저 알림을 지원하지 않아요.");let p=await Notification.requestPermission();toast(p==="granted"?"🔔 알림 권한이 켜졌어요!":"알림 권한이 거부됐어요.")}
+function toast(t){$("toast").textContent=t;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2200)}
+if("serviceWorker"in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+render();
+</script>
+</body></html>
